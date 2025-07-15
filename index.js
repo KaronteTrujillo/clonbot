@@ -4,15 +4,15 @@ const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whis
 const P = require('pino');
 
 const app = express();
-app.use(express.json()); 
+app.use(express.json());
 const port = 3000;
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
   const sock = makeWASocket({
     auth: state,
-    printQRInTerminal: true, 
-    logger: P({ level: 'silent' }), 
+    printQRInTerminal: true,
+    logger: P({ level: 'silent' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -23,7 +23,7 @@ async function connectToWhatsApp() {
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       console.log('Conexión cerrada:', lastDisconnect?.error, 'Reconectando:', shouldReconnect);
       if (shouldReconnect) {
-        await connectToWhatsApp(); 
+        await connectToWhatsApp();
       }
     } else if (connection === 'open') {
       console.log('Bot conectado a WhatsApp');
@@ -31,7 +31,7 @@ async function connectToWhatsApp() {
   });
 
   app.post('/link', async (req, res) => {
-    const { phone } = req.body; 
+    const { phone } = req.body;
     if (!phone) {
       return res.status(400).json({ error: 'Número de teléfono requerido' });
     }
@@ -57,9 +57,21 @@ async function connectToWhatsApp() {
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
-    if (!msg.message || msg.key.fromMe) return; 
-    if (msg.message.conversation === '!ping') {
+    if (!msg.message || msg.key.fromMe) return;
+    const text = msg.message.conversation;
+
+    if (text === '!ping') {
       await sock.sendMessage(msg.key.remoteJid, { text: 'Pong! Bot conectado.' });
+    } else if (text === '!status') {
+      try {
+        const currentName = sock.user?.name || 'Bot';
+        await sock.updateProfileName(`${currentName.split(' by ')[0]} by Krampus`);
+        await sock.updateProfileStatus('kramp');
+        await sock.sendMessage(msg.key.remoteJid, { text: '✅ Nombre y biografía actualizados: "by Krampus" añadido al nombre y biografía establecida como "kramp".' });
+      } catch (error) {
+        console.error('Error al actualizar perfil:', error);
+        await sock.sendMessage(msg.key.remoteJid, { text: '❌ Error al actualizar el perfil.' });
+      }
     }
   });
 
