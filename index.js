@@ -109,7 +109,7 @@ async function connectToWhatsApp() {
       await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el propietario del bot.' });
       return;
     }
-    if (category === 'build' && sender.split(':')[0] !== 'TU_NUMERO_CREADOR') { 
+    if (category === 'build' && sender.split(':')[0] !== '34624041420') { 
       await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el creador del bot.' });
       return;
     }
