@@ -73,7 +73,7 @@ async function connectToWhatsApp() {
     if (!msg.message || msg.key.fromMe) return;
 
     const text = msg.message.conversation || '';
-    if (!text.startsWith(config.prefix)) return; 
+    if (!text.startsWith(config.prefix)) return;
 
     const args = text.slice(config.prefix.length).trim().split(/ +/);
     const commandName = args.shift().toLowerCase();
@@ -89,11 +89,15 @@ async function connectToWhatsApp() {
 
     let command, category;
     for (const cat in commands) {
-      if (commands[cat][commandName]) {
-        command = commands[cat][commandName];
-        category = cat;
-        break;
+      for (const cmd in commands[cat]) {
+        const cmdObj = commands[cat][cmd];
+        if ((cmdObj.commands && cmdObj.commands.includes(commandName)) || cmdObj.name === commandName) {
+          command = cmdObj;
+          category = cat;
+          break;
+        }
       }
+      if (command) break;
     }
 
     if (!command) {
@@ -109,7 +113,7 @@ async function connectToWhatsApp() {
       await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el propietario del bot.' });
       return;
     }
-    if (category === 'build' && sender.split(':')[0] !== '34624041420') { 
+    if (category === 'build' && sender.split(':')[0] !== '34624041420') {
       await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el creador del bot.' });
       return;
     }
