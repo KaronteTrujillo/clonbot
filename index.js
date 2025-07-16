@@ -27,6 +27,9 @@ async function connectToWhatsApp() {
       }
     } else if (connection === 'open') {
       console.log('Bot conectado a WhatsApp');
+      if (sock.user) {
+        await sock.sendMessage(`${sock.user.id.split(':')[0]}@s.whatsapp.net`, { text: 'Kramp-sub conectado exitosamente!' });
+      }
     }
   });
 
