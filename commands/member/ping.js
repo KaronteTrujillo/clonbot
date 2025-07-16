@@ -1,6 +1,11 @@
 module.exports = {
   name: 'ping',
   execute: async (sock, msg) => {
-    await sock.sendMessage(msg.key.remoteJid, { text: 'Bot conectado.' });
+    const startTime = Date.now();
+    await sock.sendMessage(msg.key.remoteJid, { react: { text: '🆗', key: msg.key } });
+    const endTime = Date.now();
+    const latency = endTime - startTime;
+    const speed = latency.toFixed(2) + 'ms';
+    await sock.sendMessage(msg.key.remoteJid, { text: `Velocidad de respuesta: ${speed}` });
   },
 };
