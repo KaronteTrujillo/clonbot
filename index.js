@@ -2,10 +2,45 @@ const express = require('express');
 const { Boom } = require('@hapi/boom');
 const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const P = require('pino');
+const fs = require('fs').promises;
+const path = require('path');
 
 const app = express();
 app.use(express.json());
 const port = 3000;
+
+const configPath = path.join(__dirname, 'config', 'config.json');
+let config = { prefix: '!', ownerName: 'Propietario', ownerNumber: '' };
+async function loadConfig() {
+  try {
+    const data = await fs.readFile(configPath, 'utf8');
+    config = { ...config, ...JSON.parse(data) };
+  } catch (error) {
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+  }
+}
+loadConfig();
+
+const commands = { admin: {}, member: {}, owner: {}, build: {} };
+async function loadCommands() {
+  const categories = ['admin', 'member', 'owner', 'build'];
+  for (const category of categories) {
+    const dir = path.join(__dirname, 'commands', category);
+    try {
+      const files = await fs.readdir(dir);
+      for (const file of files) {
+        if (file.endsWith('.js')) {
+          const commandName = file.replace('.js', '');
+          const command = require(path.join(dir, file));
+          commands[category][commandName] = command;
+        }
+      }
+    } catch (error) {
+      console.error(`Error al cargar comandos de ${category}:`, error);
+    }
+  }
+}
+loadCommands();
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -33,6 +68,60 @@ async function connectToWhatsApp() {
     }
   });
 
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const text = msg.message.conversation || '';
+    if (!text.startsWith(config.prefix)) return; 
+
+    const args = text.slice(config.prefix.length).trim().split(/ +/);
+    const commandName = args.shift().toLowerCase();
+    const sender = msg.key.participant || msg.key.remoteJid;
+    const isGroup = msg.key.remoteJid.endsWith('@g.us');
+    let isAdmin = false;
+
+    if (isGroup) {
+      const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+      const participant = groupMetadata.participants.find(p => p.id === sender);
+      isAdmin = participant?.admin === 'admin' || participant?.admin === 'superadmin';
+    }
+
+    let command, category;
+    for (const cat in commands) {
+      if (commands[cat][commandName]) {
+        command = commands[cat][commandName];
+        category = cat;
+        break;
+      }
+    }
+
+    if (!command) {
+      await sock.sendMessage(msg.key.remoteJid, { text: `❌ El comando "${commandName}" no existe. Usa ${config.prefix}help para ver los comandos disponibles.` });
+      return;
+    }
+
+    if (category === 'admin' && !isAdmin) {
+      await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para administradores.' });
+      return;
+    }
+    if (category === 'owner' && sender.split(':')[0] !== config.ownerNumber) {
+      await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el propietario del bot.' });
+      return;
+    }
+    if (category === 'build' && sender.split(':')[0] !== 'TU_NUMERO_CREADOR') { 
+      await sock.sendMessage(msg.key.remoteJid, { text: '❌ Este comando es solo para el creador del bot.' });
+      return;
+    }
+
+    try {
+      await command.execute(sock, msg, args);
+    } catch (error) {
+      console.error(`Error al ejecutar ${commandName}:`, error);
+      await sock.sendMessage(msg.key.remoteJid, { text: '❌ Error al ejecutar el comando.' });
+    }
+  });
+
   app.post('/link', async (req, res) => {
     const { phone } = req.body;
     if (!phone) {
@@ -55,26 +144,6 @@ async function connectToWhatsApp() {
     } catch (error) {
       console.error('Error al solicitar/enviar el código:', error);
       res.status(500).json({ error: 'Error al procesar la solicitud' });
-    }
-  });
-
-  sock.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message || msg.key.fromMe) return;
-    const text = msg.message.conversation;
-
-    if (text === '!ping') {
-      await sock.sendMessage(msg.key.remoteJid, { text: 'Pong! Bot conectado.' });
-    } else if (text === '!status') {
-      try {
-        const currentName = sock.user?.name || 'Bot';
-        await sock.updateProfileName(`${currentName.split(' by ')[0]} by Krampus`);
-        await sock.updateProfileStatus('kramp');
-        await sock.sendMessage(msg.key.remoteJid, { text: '✅ Nombre y biografía actualizados: "by Krampus" añadido al nombre y biografía establecida como "kramp".' });
-      } catch (error) {
-        console.error('Error al actualizar perfil:', error);
-        await sock.sendMessage(msg.key.remoteJid, { text: '❌ Error al actualizar el perfil.' });
-      }
     }
   });
 
