@@ -4,6 +4,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 
 module.exports = {
   name: 'imagen',
+  commands: ['jpg', 'img', 'imagen'],
   execute: async (sock, msg, args) => {
     if (!args.length) {
       await sock.sendMessage(msg.key.remoteJid, { text: '❌ Añade una descripción para generar la imagen' });
